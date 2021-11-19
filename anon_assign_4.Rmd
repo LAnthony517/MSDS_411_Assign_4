@@ -1,0 +1,160 @@
+---
+title: "MSDS 411 Assign_4"
+author: "Lucas Anthony"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(farff) # for reading arff file
+library(cvTools) # explicit creation of folds for cross-validation
+library(ModelMetrics) # used for precision-recall evaluation of classifiers
+library(car) # for recode function
+library(solitude)
+library(tidyverse)
+library(ggplot2)
+
+```
+
+
+```{r}
+raw_train <- read.csv('assignment-4-option-1-training.csv')
+raw_test <- read.csv('assignment-4-option-1-test.csv')
+length(unique(raw_test$Prod))
+head(raw_train)
+```
+
+
+```{r}
+clean_train <- subset(raw_train, select = -c(ID))
+clean_test <- subset(raw_test, select = -c(ID))
+
+str(clean_train)
+clean_train <- clean_train[complete.cases(clean_train), ]
+clean_test <- clean_test[complete.cases(clean_test), ]
+head(clean_train)
+dim(clean_train)
+
+clean_data_copy <- data.frame(clean_train)
+
+clean_data_copy$Prod <- as.factor(clean_data_copy$Prod)
+#unique(clean_train$Prod)
+#for(level in unique(clean_data_copy$Prod)){
+#      clean_train[paste("dummy", level, sep = "_")] <- ifelse(clean_train$Prod == level,     1, 0)
+#}
+clean_data_copy <- subset(clean_data_copy, select = -c(Prod))
+head(clean_data_copy)
+
+```
+
+
+```{r}
+### Fit a small isolation forest model
+iso <- isolationForest$new(num_trees = 2000, seed = 123)
+### Check which row has the highest outlier score
+model <- iso$fit(clean_data_copy)
+clean_data_copy$pred <- iso$predict( clean_data_copy)
+clean_data_copy$Insp <- as.factor(ifelse(clean_data_copy$pred$anomaly_score >=0.59, "outlier", "normal"))
+dim(raw_train)
+mean(clean_data_copy$pred$anomaly_score)
+tail(clean_data_copy)
+
+
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+
+#plot data again with outliers identified
+ggplot(clean_data_copy, aes(x = Quant, y = Val, color = Insp)) + 
+  geom_point(shape = 1, alpha = 0.5, size =2) +
+  labs(x = "x", y = "y") +
+  labs(alpha = "", colour="Legend")
+
+```
+
+
+```{r}
+plot(density(clean_data_copy$pred$anomaly_score))
+```
+
+
+```{r}
+hist(clean_data_copy$pred$anomaly_score, breaks = 10)
+```
+
+
+```{r}
+predicted_scores <- iso$predict(clean_test)
+
+
+
+clean_test <- merge(clean_test, predicted_scores, by.x = 0, by.y = 0)
+
+clean_test$pred <- as.factor(ifelse(clean_test$anomaly_score >=0.47, "fraud", "ok"))
+
+head(clean_test)
+#plot data again with outliers identified
+ggplot(clean_test, aes(x = Quant, y = Val, color = Insp)) + 
+  geom_point(shape = 1, alpha = 0.5, size =2) +
+  labs(x = "x", y = "y") +
+  labs(alpha = "", colour="Legend")
+```
+
+
+```{r}
+clean_test$Quant
+contourplot(anomaly_score ~ Quant + Val, data = clean_test, region = TRUE)
+```
+
+
+```{r}
+clean_test$match <- ifelse(clean_test$Insp == clean_test$pred, 1, 0)
+unique(clean_test$pred)
+
+clean_test$tru_pos  <- ifelse(clean_test$pred %in% "fraud" & clean_test$Insp %in% "fraud",1,0)
+clean_test$false_pos  <- ifelse(clean_test$pred %in% "fraud" & clean_test$Insp %in% "ok",1,0)
+
+sum(clean_test$tru_pos)
+sum(clean_test$match)
+dim(clean_test)
+clean_test
+
+accuracy <- sum(clean_test$match)/(nrow(clean_test))
+accuracy
+
+
+recall <- (sum(clean_test$tru_pos))/(length(which(clean_test$Insp %in% 'fraud')))
+recall
+
+
+precision <- (sum(clean_test$tru_pos))/(sum(clean_test$tru_pos) + sum(clean_test$false_pos))
+precision
+
+f1 <-  2*((precision*recall)/(precision+recall))
+f1
+
+length(clean_test$tru_pos)
+length(which(clean_test$Insp == 'fraud'))
+```
+
+
+```{r}
+confusion <- rbind(precision, recall, f1, accuracy)
+
+confusion
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
